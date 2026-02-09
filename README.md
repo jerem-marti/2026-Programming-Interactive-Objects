@@ -56,11 +56,10 @@ Aleternative to the custom PicoDriver:
 - Introduction to the ESP32 microcontroller
 - Software setup (VS Code, GitHub, etc.)
 - Introdcution/recap to Arduino 
-- Introduction to serial ports and serial communication
 - Introduction to realtime graphics and graphics APIs
 
 ### Day 2
-- Code exercises, theory
+- Introduction to serial ports, serial communication, Wifi
 - Personal reserach, prototyping, project development 
 - Daily feedback and project discussion  
 
