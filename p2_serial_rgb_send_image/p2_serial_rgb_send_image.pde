@@ -15,7 +15,7 @@ byte[]buffer;
 // PImage is Processing's image type
 PImage img;
 
-int dirX;
+int dirX=1;
 int dirY;
 int posX;
 int posY;
@@ -27,7 +27,8 @@ void setup() {
 
   smooth(8);
 
-  img = loadImage("pcb.jpg");
+  img = loadImage("pcb.j
+ pg");
 
   posX = int(random(img.width));
   posY = int(random(img.height));
