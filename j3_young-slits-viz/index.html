@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Young's Double-Slit — Quantum Observer</title>
+	<style>
+		* { box-sizing: border-box; margin: 0; padding: 0; }
+
+		body {
+			background: #1a1a2e;
+			color: #e0e0e0;
+			font-family: 'Courier New', monospace;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			padding: 1.5em;
+			gap: 1em;
+		}
+
+		h1 {
+			font-size: 1.1em;
+			color: #7fdbca;
+			letter-spacing: 0.05em;
+		}
+
+		.row {
+			display: flex;
+			gap: 1.5em;
+			align-items: flex-start;
+			flex-wrap: wrap;
+			justify-content: center;
+		}
+
+		.panel {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 0.4em;
+		}
+
+		.panel label {
+			font-size: 0.75em;
+			color: #888;
+			text-transform: uppercase;
+			letter-spacing: 0.1em;
+		}
+
+		/* Matrix preview canvas */
+		#matrixCanvas {
+			display: block;
+			background: #000;
+			image-rendering: pixelated;
+			border: 2px solid #333;
+		}
+
+		/* Webcam feed */
+		#webcam {
+			transform: scaleX(-1);
+			border: 2px solid #333;
+			border-radius: 4px;
+		}
+
+		/* Status indicators */
+		.status-bar {
+			display: flex;
+			gap: 1.5em;
+			font-size: 0.8em;
+			align-items: center;
+		}
+
+		.indicator {
+			display: flex;
+			align-items: center;
+			gap: 0.4em;
+		}
+
+		.dot {
+			width: 10px;
+			height: 10px;
+			border-radius: 50%;
+			background: #555;
+			transition: background 0.3s;
+		}
+
+		.dot.active { background: #7fdbca; }
+		.dot.watching { background: #ff6b6b; }
+
+		button {
+			padding: 0.5em 1.2em;
+			font-family: inherit;
+			font-size: 0.85em;
+			border: 1px solid #7fdbca;
+			background: transparent;
+			color: #7fdbca;
+			cursor: pointer;
+			border-radius: 3px;
+			transition: background 0.2s;
+		}
+
+		button:hover { background: rgba(127, 219, 202, 0.15); }
+
+		pre {
+			font-size: 0.7em;
+			color: #666;
+			max-width: 60ch;
+			white-space: pre-wrap;
+		}
+
+		.controls {
+			display: flex;
+			gap: 0.8em;
+			align-items: center;
+		}
+	</style>
+</head>
+<body>
+
+	<h1>Young's Double-Slit Experiment — Quantum Observer Effect</h1>
+
+	<div class="status-bar">
+		<div class="indicator">
+			<div class="dot" id="dotSerial"></div>
+			<span>Serial</span>
+		</div>
+		<div class="indicator">
+			<div class="dot" id="dotCamera"></div>
+			<span>Camera</span>
+		</div>
+		<div class="indicator">
+			<div class="dot" id="dotFace"></div>
+			<span id="faceLabel">No Observer</span>
+		</div>
+	</div>
+
+	<div class="row">
+		<div class="panel">
+			<label>LED Matrix Preview (32 × 32)</label>
+			<canvas id="matrixCanvas" width="32" height="32"></canvas>
+		</div>
+		<div class="panel">
+			<label>Webcam + Face Detection</label>
+			<video id="webcam" width="320" height="240" autoplay playsinline></video>
+		</div>
+	</div>
+
+	<div class="controls">
+		<button id="connectSerial">Connect Serial Port</button>
+		<button id="startCamera">Start Camera</button>
+	</div>
+
+	<pre id="log">Click "Start Camera" then "Connect Serial Port" (Chrome only).</pre>
+
+	<!-- ─── MediaPipe Face Detection via CDN ─── -->
+	<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin></script>
+
+	<script type="module">
+
+		// ─────────────────────────────────────────
+		//  Constants
+		// ─────────────────────────────────────────
+		const W = 32
+		const H = 32
+		const BAUD_RATE  = 921600
+		const COLOR_DEPTH = 16            // 16-bit RGB565
+		const TARGET_FPS  = 35
+		const PIXEL_DATA  = new Uint8Array(1 + W * H * (COLOR_DEPTH / 8))
+
+		// ─────────────────────────────────────────
+		//  DOM refs
+		// ─────────────────────────────────────────
+		const canvas  = document.getElementById('matrixCanvas')
+		const ctx     = canvas.getContext('2d', { willReadFrequently: true })
+		canvas.style.width  = W * 10 + 'px'
+		canvas.style.height = H * 10 + 'px'
+
+		const video   = document.getElementById('webcam')
+		const logEl   = document.getElementById('log')
+		const dotSerial = document.getElementById('dotSerial')
+		const dotCamera = document.getElementById('dotCamera')
+		const dotFace   = document.getElementById('dotFace')
+		const faceLabel = document.getElementById('faceLabel')
+
+		// ─────────────────────────────────────────
+		//  State
+		// ─────────────────────────────────────────
+		let writer      = null
+		let writing     = false   // guard: true while a serial write is in flight
+		let isObserved  = false   // true when a face looks at the screen
+		let observeBlend = 0     // smooth 0‑1 blend toward observed state
+		let frame = 0
+		let timeSample = 0
+
+		// ─────────────────────────────────────────
+		//  Serial (Chrome Web Serial API)
+		// ─────────────────────────────────────────
+		document.getElementById('connectSerial').addEventListener('click', async () => {
+			try {
+				// Request serial port access
+				const serialPort = await navigator.serial.requestPort()
+				await serialPort.open({ baudRate: BAUD_RATE })
+				writer = serialPort.writable.getWriter()
+				dotSerial.classList.add('active')
+				appendLog('Serial port connected.')
+			} catch (err) {
+				const error = 'Error opening serial port: ' + err
+				appendLog(error)
+				console.error(error)
+				writer = null
+			}
+		})
+
+		// ─────────────────────────────────────────
+		//  Camera + MediaPipe Face Detection
+		// ─────────────────────────────────────────
+		document.getElementById('startCamera').addEventListener('click', async () => {
+			try {
+				const stream = await navigator.mediaDevices.getUserMedia({
+					video: { width: 320, height: 240, facingMode: 'user' }
+				})
+				video.srcObject = stream
+				dotCamera.classList.add('active')
+				appendLog('Camera started.')
+				initFaceDetection()
+			} catch (e) {
+				appendLog('Camera error: ' + e)
+			}
+		})
+
+		function initFaceDetection() {
+			const faceDetection = new FaceDetection({
+				locateFile: file =>
+					`https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`
+			})
+
+			faceDetection.setOptions({
+				model: 'short',          // short-range model, faster
+				minDetectionConfidence: 0.5
+			})
+
+			faceDetection.onResults(results => {
+				if (results.detections && results.detections.length > 0) {
+					isObserved = true
+					dotFace.classList.add('watching')
+					dotFace.classList.remove('active')
+					faceLabel.textContent = 'Observer!'
+				} else {
+					isObserved = false
+					dotFace.classList.remove('watching')
+					dotFace.classList.add('active')
+					faceLabel.textContent = 'No Observer'
+				}
+			})
+
+			// Throttle face detection to ~4 fps to avoid starving the render loop
+			const DETECT_INTERVAL = 250  // ms between detections
+			let detecting = false
+
+			setInterval(async () => {
+				if (detecting) return          // skip if previous inference still running
+				if (video.readyState < 2) return // video not ready yet
+				detecting = true
+				try {
+					await faceDetection.send({ image: video })
+				} catch (e) {
+					// Silently skip failed frames
+				}
+				detecting = false
+			}, DETECT_INTERVAL)
+
+			appendLog('Face detection initialised (throttled to ~' + (1000 / DETECT_INTERVAL) + ' fps).')
+		}
+
+		// ─────────────────────────────────────────
+		//  Young's Double-Slit Simulation
+		// ─────────────────────────────────────────
+
+		/*
+		  Physics recap:
+		  - A barrier with TWO slits sits on the left side.
+		  - Particles / photons pass through the slits.
+		  - NOT observed  →  wave interference pattern on the detection screen
+		  - OBSERVED      →  two-band particle pattern (no interference)
+
+		  We render RIGHT-to-LEFT on the 32×32 matrix:
+		    col 0‑3    = source (emitter glow)
+		    col 4‑6    = barrier with two slits
+		    col 7‑31   = detection / screen area
+		*/
+
+		// Slit geometry
+		const BARRIER_X    = 6          // column of the barrier
+		const SLIT_WIDTH   = 2          // each slit height in pixels
+		const SLIT_GAP     = 10         // gap between slit centres
+		const SLIT_CENTER1 = Math.floor(H / 2) - Math.floor(SLIT_GAP / 2)
+		const SLIT_CENTER2 = Math.floor(H / 2) + Math.floor(SLIT_GAP / 2)
+
+		// Wavelength for interference
+		const LAMBDA = 7.0   // in pixels — tweak for visual aesthetics
+
+		// Pre-compute the interference pattern (not observed) and
+		// the particle pattern (observed) as 2D intensity arrays [x][y]
+		// We'll blend between them in real time.
+		const interference = new Float32Array(W * H)
+		const particle     = new Float32Array(W * H)
+
+		function computePatterns() {
+			const slitY1 = SLIT_CENTER1
+			const slitY2 = SLIT_CENTER2
+
+			for (let x = BARRIER_X + 1; x < W; x++) {
+				const dx = x - BARRIER_X
+				for (let y = 0; y < H; y++) {
+					const idx = y * W + x
+
+					// ── Interference (wave) ──
+					// Distance from each slit to this pixel
+					const d1 = Math.sqrt(dx * dx + (y - slitY1) * (y - slitY1))
+					const d2 = Math.sqrt(dx * dx + (y - slitY2) * (y - slitY2))
+					// Phase difference → cos² gives fringe intensity
+					const dPhase = (d1 - d2) / LAMBDA * Math.PI * 2
+					let intens = Math.pow(Math.cos(dPhase / 2), 2)
+					// Envelope: fall off away from centre
+					const envDist = Math.abs(y - H / 2)
+					const envelope = Math.exp(-envDist * envDist / (2 * 10 * 10))
+					// Fade in with distance from barrier
+					const fade = 1 - Math.exp(-dx / 6)
+					interference[idx] = intens * envelope * fade
+
+					// ── Particle (observed, two bands) ──
+					const g1 = Math.exp(-(y - slitY1) * (y - slitY1) / (2 * 3 * 3))
+					const g2 = Math.exp(-(y - slitY2) * (y - slitY2) / (2 * 3 * 3))
+					particle[idx] = Math.max(g1, g2) * fade
+				}
+			}
+		}
+		computePatterns()
+
+		// ─────────────────────────────────────────
+		//  Particles (individual photons travelling)
+		// ─────────────────────────────────────────
+		const MAX_PARTICLES = 120
+		const particles = []
+
+		function spawnParticle() {
+			// Emit from a random slit
+			const slit = Math.random() < 0.5 ? SLIT_CENTER1 : SLIT_CENTER2
+			particles.push({
+				x: BARRIER_X + 1,
+				y: slit + (Math.random() - 0.5) * SLIT_WIDTH,
+				vx: 0.25 + Math.random() * 0.25,
+				vy: 0,
+				life: 1.0
+			})
+			if (particles.length > MAX_PARTICLES) particles.shift()
+		}
+
+		function updateParticles() {
+			for (let i = particles.length - 1; i >= 0; i--) {
+				const p = particles[i]
+				p.x += p.vx
+				p.y += p.vy + (Math.random() - 0.5) * 0.15
+				p.life -= 0.008
+				if (p.x >= W || p.life <= 0) { particles.splice(i, 1) }
+			}
+		}
+
+		// ─────────────────────────────────────────
+		//  Render one frame onto the 32×32 canvas
+		// ─────────────────────────────────────────
+		function renderFrame(time) {
+
+			// Smooth blend toward desired state
+			const target = isObserved ? 1 : 0
+			observeBlend += (target - observeBlend) * 0.045
+
+			const imageData = ctx.createImageData(W, H)
+			const px = imageData.data
+
+			// Hue palette: unobserved = cyan/blue, observed = warm magenta/orange
+			// We'll interpolate between them.
+
+			for (let y = 0; y < H; y++) {
+				for (let x = 0; x < W; x++) {
+					const idx = y * W + x
+					const pi  = idx * 4
+
+					// ── Source glow (leftmost columns) ──
+					if (x <= 3) {
+						const glow = Math.sin(time * 0.003 + y * 0.4) * 0.3 + 0.5
+						const brightness = glow * (1 - x / 4) * 0.7
+						// Soft white-blue glow
+						px[pi + 0] = Math.floor(100 * brightness)
+						px[pi + 1] = Math.floor(160 * brightness)
+						px[pi + 2] = Math.floor(255 * brightness)
+						px[pi + 3] = 255
+						continue
+					}
+
+					// ── Barrier ──
+					if (x >= 4 && x <= BARRIER_X) {
+						const isSlit =
+							(Math.abs(y - SLIT_CENTER1) <= SLIT_WIDTH / 2) ||
+							(Math.abs(y - SLIT_CENTER2) <= SLIT_WIDTH / 2)
+						if (isSlit) {
+							// Slit opening: faint glow
+							px[pi + 0] = 40
+							px[pi + 1] = 80
+							px[pi + 2] = 100
+						} else {
+							// Solid barrier
+							px[pi + 0] = 12
+							px[pi + 1] = 12
+							px[pi + 2] = 18
+						}
+						px[pi + 3] = 255
+						continue
+					}
+
+					// ── Screen / detection area ──
+					const intI = interference[idx]
+					const parI = particle[idx]
+					// Blend based on observation
+					const val  = intI * (1 - observeBlend) + parI * observeBlend
+
+					// Colour: unobserved → cyan,  observed → magenta / red
+					const r = Math.floor(lerp(10,  220, observeBlend) * val)
+					const g = Math.floor(lerp(180, 40,  observeBlend) * val)
+					const b = Math.floor(lerp(255, 100, observeBlend) * val)
+
+					px[pi + 0] = r
+					px[pi + 1] = g
+					px[pi + 2] = b
+					px[pi + 3] = 255
+				}
+			}
+
+			// ── Draw travelling photon particles ──
+			if (frame % 2 === 0) spawnParticle()
+			updateParticles()
+
+			for (const p of particles) {
+				const px0 = Math.floor(p.x)
+				const py0 = Math.floor(p.y)
+				if (px0 < 0 || px0 >= W || py0 < 0 || py0 >= H) continue
+				const pi = (py0 * W + px0) * 4
+				const bright = p.life
+				// Additive blend — white-ish
+				px[pi + 0] = Math.min(255, px[pi + 0] + Math.floor(200 * bright))
+				px[pi + 1] = Math.min(255, px[pi + 1] + Math.floor(220 * bright))
+				px[pi + 2] = Math.min(255, px[pi + 2] + Math.floor(255 * bright))
+			}
+
+			// ── Subtle time-based shimmer on fringes ──
+			const shimmer = Math.sin(time * 0.002) * 0.05 + 0.95
+			for (let i = 0; i < px.length; i += 4) {
+				px[i + 0] = Math.min(255, Math.floor(px[i + 0] * shimmer))
+				px[i + 1] = Math.min(255, Math.floor(px[i + 1] * shimmer))
+				px[i + 2] = Math.min(255, Math.floor(px[i + 2] * shimmer))
+			}
+
+			ctx.putImageData(imageData, 0, 0)
+		}
+
+		// ─────────────────────────────────────────
+		//  Main Loop
+		// ─────────────────────────────────────────
+		const FPS = { frames: 0, ptime: 0, fps: 0, tick(t) {
+			this.frames++
+			if (t >= this.ptime + 1000) {
+				this.fps = this.frames * 1000 / (t - this.ptime)
+				this.ptime = t; this.frames = 0
+			}
+			return this.fps
+		}}
+
+		requestAnimationFrame(loop)
+
+		async function loop(time) {
+			requestAnimationFrame(loop)
+
+			// Throttle
+			const delta = time - timeSample
+			const interval = 1000 / TARGET_FPS
+			if (delta < interval) return
+			timeSample = time - delta % interval
+
+			document.title = 'FPS: ' + FPS.tick(time).toFixed(1)
+
+			// ── Render ──
+			renderFrame(time)
+			frame++
+
+			// ── Send to matrix via serial ──
+			if (!writer) return
+			if (writing) return   // skip frame if previous write still in flight
+
+			// Get pixel data from canvas
+			const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+			const pixels = imageData.data;
+
+			try {
+				// Send pixel data
+				// The first byte is a magic number to identify the data format
+				PIXEL_DATA[0] = 42
+				let idx = 1 // Start at the second byte
+
+				for (let i = 0; i < pixels.length; i += 4) {
+					const r = pixels[i + 0]
+					const g = pixels[i + 1]
+					const b = pixels[i + 2]
+					const rgb16 = packRGB16(r, g, b)
+					const [highByte, lowByte] = splitBytes(rgb16)
+					PIXEL_DATA[idx++] = highByte
+					PIXEL_DATA[idx++] = lowByte
+				}
+
+				writing = true
+				await writer.write(PIXEL_DATA)
+				writing = false
+
+			} catch (err) {
+				writing = false
+				const error = 'Error in draw loop: ' + err
+				console.error(error)
+				appendLog(error)
+			}
+		}
+
+		// ─────────────────────────────────────────
+		//  Helpers
+		// ─────────────────────────────────────────
+		function packRGB16(r, g, b) {
+			return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+		}
+
+		function splitBytes(v) {
+			return [(v >> 8) & 0xFF, v & 0xFF]
+		}
+
+		function lerp(a, b, t) {
+			return a + (b - a) * t
+		}
+
+		function appendLog(msg) {
+			logEl.textContent += '\n' + msg
+			logEl.scrollTop = logEl.scrollHeight
+		}
+
+	</script>
+</body>
+</html>

@@ -31,9 +31,9 @@ void setup() {
   
   try {
     // On macOS / Linux see the console for all available ports
-    final String PORT_NAME = "/dev/cu.usbserial-02B3ACDB";
+    // final String PORT_NAME = "/dev/cu.usbserial-02B3ACDB";
     // On Windows the ports are numbered
-    // final String PORT_NAME = "COM3";
+    final String PORT_NAME = "COM7";
     serial = new Serial(this, PORT_NAME, BAUD_RATE);
   } catch (Exception e) {
     println("Serial port not intialized...");
