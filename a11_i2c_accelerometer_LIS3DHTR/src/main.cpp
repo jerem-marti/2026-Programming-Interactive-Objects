@@ -1,6 +1,7 @@
 /**
- * Reading values from LIS3DHTR sensor - 3 axis accelerometer and temperature sensor.
- * Connect the sensor as follows:
+ * LIS3DHTR - 3 axis accelerometer and temperature sensor.
+ *
+ * Connection:
  * VCC <-> 5V
  * GND <-> GND
  * SDA <-> 23
@@ -8,34 +9,39 @@
  */
 
 #include <Arduino.h>
-#include "LIS3DHTR.h"
 #include <Wire.h>
-LIS3DHTR<TwoWire> LIS;
+#include "LIS3DHTR.h"
 
 #define WIRE Wire
 #define I2C_SDA 23
 #define I2C_SCL 2
 
+LIS3DHTR<TwoWire> LIS;
+
 void setup() {
-	Wire.begin(I2C_SDA, I2C_SCL);
 	Serial.begin(9600);
 
-	while (!Serial) {};
+	Wire.begin(I2C_SDA, I2C_SCL);
 
 	LIS.begin(Wire, LIS3DHTR_ADDRESS_UPDATED); //IIC init
-	delay(100);
+
+	if (!LIS) {
+		while(true) {
+			Serial.println("Error initializing LIS3DHTR.");
+			delay(1000);
+		}
+	}
+	Serial.println("LIS3DHTR initialized.");
+
 	LIS.setOutputDataRate(LIS3DHTR_DATARATE_50HZ);
-	LIS.setHighSolution(true); //High solution enable
+	LIS.setHighSolution(true);
 }
 
 void loop() {
-	if (!LIS) {
-		Serial.println("LIS3DHTR didn't connect.");
-		return;
-	}
-	//3 axis
+
 	Serial.print("x:"); Serial.println(LIS.getAccelerationX());
 	Serial.print("y:"); Serial.println(LIS.getAccelerationY());
 	Serial.print("z:"); Serial.println(LIS.getAccelerationZ());
-	delay(10);
+
+	delay(100);
 }
