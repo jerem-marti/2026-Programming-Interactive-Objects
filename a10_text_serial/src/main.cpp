@@ -33,6 +33,16 @@ SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(bg, TOTAL_WIDTH, TOTAL_HEIGHT, COLOR_DEPTH
 
 void setup() {
 
+	// Upload the sketch with this command to enable the serial monitor:
+
+	// single keystroke
+	// pio run -t upload && pio device monitor -b 115200
+	
+	// with echo + return:
+	// pio run -t upload && pio device monitor --baud 115200 --echo --filter send_on_enter
+
+
+	Serial.begin(115200);
 	// On board LED (useful for debugging)
 	pinMode(PICO_LED_PIN, OUTPUT);
 
@@ -42,29 +52,33 @@ void setup() {
 	bg.enableColorCorrection(true);
 	matrix.addLayer(&bg);
 	matrix.setBrightness(255);
+
+	// Init the library and the matrix
 	matrix.begin();
 }
 
+// Buffer for incoming messages
+char msg[32];
+
+int frame = 0;
 void loop() {
 
-	int cx = TOTAL_WIDTH / 2.0;
-	int cy = TOTAL_HEIGHT / 2.0;
-	float r = 10.0;
-
-	for (int j=0; j<TOTAL_HEIGHT; j++) {
-		for (int i=0; i<TOTAL_WIDTH; i++) {
-
-			float dx = cx - i;
-			float dy = cy - j;
-			float d = sqrt( dx * dx + dy * dy);
-
-			if (d <= r) {
-				bg.drawPixel(i, j, {100, 100, 100});
-			} else {
-				bg.drawPixel(i, j, {0, 0, 0});
-			}
-		}
+	if (Serial.available()) {
+		Serial.readBytesUntil('\n', msg, sizeof(msg));
 	}
 
-	bg.swapBuffers();
+	bg.fillScreen({0, 0, 0});
+	bg.setFont(font3x5);
+    // bg.setFont(font5x7);
+    // bg.setFont(font6x10);
+    // bg.setFont(font8x13);
+    // bg.setFont(gohufont11);
+    // bg.setFont(gohufont11b);	
+	for (int i=0; i<5; i++) {
+		int x = sin(frame * 0.03 + ((float) i * PI) / 5.0) * TOTAL_WIDTH / 2;
+		bg.drawString(x, i * 6 + 1, {255, 0, 0}, msg);
+	}
+	bg.swapBuffers(false);
+
+	frame++;
 }

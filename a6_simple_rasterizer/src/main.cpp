@@ -45,26 +45,34 @@ void setup() {
 	matrix.begin();
 }
 
+uint frame = 0;
+
 void loop() {
 
-	int cx = TOTAL_WIDTH / 2.0;
-	int cy = TOTAL_HEIGHT / 2.0;
-	float r = 10.0;
+	int cx = 0.0;
+	int cy = 0.0;
+	float r = 0.75;
+
+	float  t = frame * 0.1;
 
 	for (int j=0; j<TOTAL_HEIGHT; j++) {
 		for (int i=0; i<TOTAL_WIDTH; i++) {
 
-			float dx = cx - i;
-			float dy = cy - j;
-			float d = sqrt( dx * dx + dy * dy);
+			float u = (float)i / (TOTAL_WIDTH - 1) * 2 - 1.0;
+			float v = (float)j / (TOTAL_HEIGHT - 1) * 2 - 1.0;
 
-			if (d <= r) {
-				bg.drawPixel(i, j, {100, 100, 100});
-			} else {
-				bg.drawPixel(i, j, {0, 0, 0});
-			}
+			float dx = cx - u;
+			float dy = cy - v;
+
+			float d = sqrt( dx * dx + dy * dy);
+			float s = sin(d*8.0 - t) * 0.5 + 0.5;
+			float gray = s * 255;
+
+			bg.drawPixel(i, j, {gray, gray, gray});
 		}
 	}
 
 	bg.swapBuffers();
+
+	frame++;
 }

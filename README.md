@@ -6,9 +6,6 @@ Workshop 9–13.2.2025
 ## Project Brief
 The aim of the workshop is to embrace constraints and develop ideas around the limitations of a low-resolution display. Limitations as (design-) opportunities rather than obstacles.
 
-Source:  
-[Design Q&A with Charles and Ray Eames](https://www.hermanmiller.com/stories/why-magazine/design-q-and-a-charles-and-ray-eames/)
-
 
 ## Objectives 
 The assignment is open-ended. Students are invited to approach the project from the ground up: instead of focusing on an initial idea for the output or final result, the attention should be on the process of exploration and discovery.
@@ -17,6 +14,7 @@ Explore three different ways to apporach the brief:
 - technical approach
 - contextual approach 
 - conceptpual approach 
+
 
 ## Expected outcome, deliveries 
 On the final day, all projects will be presented to the class. The delivery must include:
@@ -49,7 +47,6 @@ Aleternative to the custom PicoDriver:
 - [VS Code](https://code.visualstudio.com/download)
 - [Platformio for VS Code](https://platformio.org) (install as VS Code plugin)
 - [GitHub Desktop](https://desktop.github.com) (not mandatory, but handy)
-- Some Windows machines may need an extra serial port driver [CP210x USB to UART Bridge](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers?tab=downloads)  
 
 ## Workshop organization
 
@@ -59,11 +56,10 @@ Aleternative to the custom PicoDriver:
 - Introduction to the ESP32 microcontroller
 - Software setup (VS Code, GitHub, etc.)
 - Introdcution/recap to Arduino 
-- Introduction to serial ports and serial communication
 - Introduction to realtime graphics and graphics APIs
 
 ### Day 2
-- Code exercises, theory
+- Introduction to serial ports, serial communication, Wifi
 - Personal reserach, prototyping, project development 
 - Daily feedback and project discussion  
 
@@ -88,3 +84,11 @@ the phyiscial LED matrix, a possible context, LEDs as light source(s),
 - Bring something interesting, a little discovery – not an idea for a finished project; let the process guide you
 - Show hand drawings and sketches, low-quality screenshots or videos, a little demo, an animation  
 - No mood-boards! No projects of others that involve LED matrices! Do (deep) research instead on the boader topic(s). 
+
+
+## Sources
+- [Design Q&A with Charles and Ray Eames](https://www.hermanmiller.com/stories/why-magazine/design-q-and-a-charles-and-ray-eames/)
+- [AONDEMO - a demo for an old telephone](https://www.youtube.com/watch?v=GPG6a__Q0Sg)
+- [Inigo Quilez: 2D distance functions](https://iquilezles.org/articles/distfunctions2d/)
+- [Inigo Quilez: 23 distance functions](https://iquilezles.org/articles/distfunctions/)
+- [Inigo Quilez: [Painting a Landscape with Mathematics](https://www.youtube.com/watch?v=BFld4EBO2RE&t=2268s)
