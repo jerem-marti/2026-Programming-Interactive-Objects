@@ -161,7 +161,7 @@
 		// ─────────────────────────────────────────
 		const W = 32
 		const H = 32
-		const BAUD_RATE  = 921600
+		const BAUD_RATE   = 921600
 		const COLOR_DEPTH = 16            // 16-bit RGB565
 		const TARGET_FPS  = 35
 		const PIXEL_DATA  = new Uint8Array(1 + W * H * (COLOR_DEPTH / 8))
@@ -174,8 +174,8 @@
 		canvas.style.width  = W * 10 + 'px'
 		canvas.style.height = H * 10 + 'px'
 
-		const video   = document.getElementById('webcam')
-		const logEl   = document.getElementById('log')
+		const video     = document.getElementById('webcam')
+		const logEl     = document.getElementById('log')
 		const dotSerial = document.getElementById('dotSerial')
 		const dotCamera = document.getElementById('dotCamera')
 		const dotFace   = document.getElementById('dotFace')
@@ -184,9 +184,9 @@
 		// ─────────────────────────────────────────
 		//  State
 		// ─────────────────────────────────────────
-		let writer      = null
-		let writing     = false   // guard: true while a serial write is in flight
-		let isObserved  = false   // true when a face looks at the screen
+		let writer       = null
+		let writing      = false  // guard: true while a serial write is in flight
+		let isObserved   = false  // debounced observation state
 		let observeBlend = 0     // smooth 0‑1 blend toward observed state
 		let frame = 0
 		let timeSample = 0
@@ -234,232 +234,292 @@
 			})
 
 			faceDetection.setOptions({
-				model: 'short',          // short-range model, faster
+				model: 'short',
 				minDetectionConfidence: 0.5
 			})
 
+			// ── Debounce: require N consecutive same-state results to flip ──
+			const DEBOUNCE_COUNT = 3
+			let consecutiveSame = 0
+			let lastRawState = false
+
 			faceDetection.onResults(results => {
-				if (results.detections && results.detections.length > 0) {
-					isObserved = true
+				const faceNow = !!(results.detections && results.detections.length > 0)
+
+				if (faceNow === lastRawState) {
+					consecutiveSame++
+				} else {
+					consecutiveSame = 1
+					lastRawState = faceNow
+				}
+
+				// Only flip the actual state after DEBOUNCE_COUNT consistent readings
+				if (consecutiveSame >= DEBOUNCE_COUNT && isObserved !== faceNow) {
+					isObserved = faceNow
+				}
+
+				// UI indicators (can be instant, just visual)
+				if (isObserved) {
 					dotFace.classList.add('watching')
 					dotFace.classList.remove('active')
 					faceLabel.textContent = 'Observer!'
 				} else {
-					isObserved = false
 					dotFace.classList.remove('watching')
 					dotFace.classList.add('active')
 					faceLabel.textContent = 'No Observer'
 				}
 			})
 
-			// Throttle face detection to ~4 fps to avoid starving the render loop
-			const DETECT_INTERVAL = 250  // ms between detections
+			// Throttle face detection to ~4 fps
+			const DETECT_INTERVAL = 250
 			let detecting = false
 
 			setInterval(async () => {
-				if (detecting) return          // skip if previous inference still running
-				if (video.readyState < 2) return // video not ready yet
+				if (detecting) return
+				if (video.readyState < 2) return
 				detecting = true
 				try {
 					await faceDetection.send({ image: video })
-				} catch (e) {
-					// Silently skip failed frames
-				}
+				} catch (e) { /* skip */ }
 				detecting = false
 			}, DETECT_INTERVAL)
 
-			appendLog('Face detection initialised (throttled to ~' + (1000 / DETECT_INTERVAL) + ' fps).')
+			appendLog('Face detection initialised (throttled, debounced).')
 		}
 
 		// ─────────────────────────────────────────
-		//  Young's Double-Slit Simulation
+		//  SDF helpers (inspired by Inigo Quilez)
+		//  https://iquilezles.org/articles/distfunctions/
 		// ─────────────────────────────────────────
 
-		/*
-		  Physics recap:
-		  - A barrier with TWO slits sits on the left side.
-		  - Particles / photons pass through the slits.
-		  - NOT observed  →  wave interference pattern on the detection screen
-		  - OBSERVED      →  two-band particle pattern (no interference)
-
-		  We render RIGHT-to-LEFT on the 32×32 matrix:
-		    col 0‑3    = source (emitter glow)
-		    col 4‑6    = barrier with two slits
-		    col 7‑31   = detection / screen area
-		*/
-
-		// Slit geometry
-		const BARRIER_X    = 6          // column of the barrier
-		const SLIT_WIDTH   = 2          // each slit height in pixels
-		const SLIT_GAP     = 10         // gap between slit centres
-		const SLIT_CENTER1 = Math.floor(H / 2) - Math.floor(SLIT_GAP / 2)
-		const SLIT_CENTER2 = Math.floor(H / 2) + Math.floor(SLIT_GAP / 2)
-
-		// Wavelength for interference
-		const LAMBDA = 7.0   // in pixels — tweak for visual aesthetics
-
-		// Pre-compute the interference pattern (not observed) and
-		// the particle pattern (observed) as 2D intensity arrays [x][y]
-		// We'll blend between them in real time.
-		const interference = new Float32Array(W * H)
-		const particle     = new Float32Array(W * H)
-
-		function computePatterns() {
-			const slitY1 = SLIT_CENTER1
-			const slitY2 = SLIT_CENTER2
-
-			for (let x = BARRIER_X + 1; x < W; x++) {
-				const dx = x - BARRIER_X
-				for (let y = 0; y < H; y++) {
-					const idx = y * W + x
-
-					// ── Interference (wave) ──
-					// Distance from each slit to this pixel
-					const d1 = Math.sqrt(dx * dx + (y - slitY1) * (y - slitY1))
-					const d2 = Math.sqrt(dx * dx + (y - slitY2) * (y - slitY2))
-					// Phase difference → cos² gives fringe intensity
-					const dPhase = (d1 - d2) / LAMBDA * Math.PI * 2
-					let intens = Math.pow(Math.cos(dPhase / 2), 2)
-					// Envelope: fall off away from centre
-					const envDist = Math.abs(y - H / 2)
-					const envelope = Math.exp(-envDist * envDist / (2 * 10 * 10))
-					// Fade in with distance from barrier
-					const fade = 1 - Math.exp(-dx / 6)
-					interference[idx] = intens * envelope * fade
-
-					// ── Particle (observed, two bands) ──
-					const g1 = Math.exp(-(y - slitY1) * (y - slitY1) / (2 * 3 * 3))
-					const g2 = Math.exp(-(y - slitY2) * (y - slitY2) / (2 * 3 * 3))
-					particle[idx] = Math.max(g1, g2) * fade
-				}
-			}
+		// Signed distance to an axis-aligned 2D box centred at (cx,cy)
+		function sdBox(px, py, cx, cy, bx, by) {
+			const qx = Math.abs(px - cx) - bx
+			const qy = Math.abs(py - cy) - by
+			const outside = Math.sqrt(Math.max(qx, 0) ** 2 + Math.max(qy, 0) ** 2)
+			const inside  = Math.min(Math.max(qx, qy), 0)
+			return outside + inside
 		}
-		computePatterns()
+
+		// Signed distance to a circle centred at (cx,cy)
+		function sdCircle(px, py, cx, cy, r) {
+			const dx = px - cx, dy = py - cy
+			return Math.sqrt(dx * dx + dy * dy) - r
+		}
+
+		// Smooth boolean union (IQ's updated formula)
+		function opSmoothUnion(a, b, k) {
+			k *= 4.0
+			const h = Math.max(k - Math.abs(a - b), 0.0)
+			return Math.min(a, b) - h * h * 0.25 / k
+		}
+
+		// Boolean subtraction: carve shape a out of shape b
+		function opSubtraction(a, b) {
+			return Math.max(-a, b)
+		}
+
+		// Hermite smooth-step
+		function smoothstep(e0, e1, x) {
+			const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)))
+			return t * t * (3 - 2 * t)
+		}
+
+		function clampf(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v }
+		function lerp(a, b, t) { return a + (b - a) * t }
+		function saturate(v) { return clampf(v, 0, 1) }
 
 		// ─────────────────────────────────────────
-		//  Particles (individual photons travelling)
+		//  Experiment geometry (normalised coords -1…+1)
 		// ─────────────────────────────────────────
-		const MAX_PARTICLES = 120
-		const particles = []
 
-		function spawnParticle() {
-			// Emit from a random slit
-			const slit = Math.random() < 0.5 ? SLIT_CENTER1 : SLIT_CENTER2
-			particles.push({
-				x: BARRIER_X + 1,
-				y: slit + (Math.random() - 0.5) * SLIT_WIDTH,
-				vx: 0.25 + Math.random() * 0.25,
-				vy: 0,
-				life: 1.0
+		const BARRIER_U   = -0.55     // barrier x position
+		const BARRIER_HW  = 0.06      // barrier half-width
+		const SLIT_V1     = -0.32     // slit 1 centre y
+		const SLIT_V2     =  0.32     // slit 2 centre y
+		const SLIT_HH     = 0.07      // slit half-height
+		const SOURCE_U    = -0.88     // source x position
+
+		// Wave parameters
+		const WAVE_K      = 22.0      // spatial frequency (wave-number)
+		const WAVE_SPEED  = 4.0       // temporal speed
+
+		// ─────────────────────────────────────────
+		//  Photon particles
+		// ─────────────────────────────────────────
+		const MAX_PHOTONS = 60
+		const photons = []
+
+		function spawnPhoton() {
+			// Through one slit at random
+			const slitV = Math.random() < 0.5 ? SLIT_V1 : SLIT_V2
+			const spread = isObserved ? 0.01 : 0.04  // tight for particle, wider for wave
+			photons.push({
+				u:    BARRIER_U + BARRIER_HW + 0.02,
+				v:    slitV + (Math.random() - 0.5) * SLIT_HH * 2,
+				vu:   0.012 + Math.random() * 0.008,
+				vv:   isObserved ? 0 : (Math.random() - 0.5) * 0.006,
+				life: 1.0,
+				slit: slitV
 			})
-			if (particles.length > MAX_PARTICLES) particles.shift()
+			if (photons.length > MAX_PHOTONS) photons.shift()
 		}
 
-		function updateParticles() {
-			for (let i = particles.length - 1; i >= 0; i--) {
-				const p = particles[i]
-				p.x += p.vx
-				p.y += p.vy + (Math.random() - 0.5) * 0.15
-				p.life -= 0.008
-				if (p.x >= W || p.life <= 0) { particles.splice(i, 1) }
+		function updatePhotons() {
+			for (let i = photons.length - 1; i >= 0; i--) {
+				const p = photons[i]
+				p.u += p.vu
+				p.v += p.vv
+				p.life -= 0.012
+				if (p.u > 1.05 || p.life <= 0) photons.splice(i, 1)
 			}
 		}
 
 		// ─────────────────────────────────────────
-		//  Render one frame onto the 32×32 canvas
+		//  Render frame (SDF + wave interference)
 		// ─────────────────────────────────────────
 		function renderFrame(time) {
 
-			// Smooth blend toward desired state
+			const t = time * 0.001   // seconds
+
+			// Smooth blend toward target (slow enough to be glitch-free)
 			const target = isObserved ? 1 : 0
-			observeBlend += (target - observeBlend) * 0.045
+			observeBlend += (target - observeBlend) * 0.025
 
-			const imageData = ctx.createImageData(W, H)
-			const px = imageData.data
+			const imgData = ctx.createImageData(W, H)
+			const px = imgData.data
+			const pxSize = 2.0 / W   // pixel size in normalised coords
 
-			// Hue palette: unobserved = cyan/blue, observed = warm magenta/orange
-			// We'll interpolate between them.
+			for (let j = 0; j < H; j++) {
+				for (let i = 0; i < W; i++) {
 
-			for (let y = 0; y < H; y++) {
-				for (let x = 0; x < W; x++) {
-					const idx = y * W + x
-					const pi  = idx * 4
+					// Normalised coords -1 … +1
+					const u = (i / (W - 1)) * 2.0 - 1.0
+					const v = (j / (H - 1)) * 2.0 - 1.0
+					const pi = (j * W + i) * 4
 
-					// ── Source glow (leftmost columns) ──
-					if (x <= 3) {
-						const glow = Math.sin(time * 0.003 + y * 0.4) * 0.3 + 0.5
-						const brightness = glow * (1 - x / 4) * 0.7
-						// Soft white-blue glow
-						px[pi + 0] = Math.floor(100 * brightness)
-						px[pi + 1] = Math.floor(160 * brightness)
-						px[pi + 2] = Math.floor(255 * brightness)
-						px[pi + 3] = 255
-						continue
+					let r = 0, g = 0, b = 0
+
+					// ── 1) Barrier with slits (SDF) ──
+					let dBarrier = sdBox(u, v, BARRIER_U, 0, BARRIER_HW, 1.05)
+					const dSlit1 = sdBox(u, v, BARRIER_U, SLIT_V1, BARRIER_HW + 0.03, SLIT_HH)
+					const dSlit2 = sdBox(u, v, BARRIER_U, SLIT_V2, BARRIER_HW + 0.03, SLIT_HH)
+					dBarrier = opSubtraction(dSlit1, dBarrier)
+					dBarrier = opSubtraction(dSlit2, dBarrier)
+
+					const barrierMask = smoothstep(pxSize, -pxSize, dBarrier)
+
+					// ── 2) Source emitter glow ──
+					const dSource = sdBox(u, v, SOURCE_U, 0, 0.04, 0.5)
+					const sourceMask = smoothstep(pxSize * 2, -pxSize, dSource)
+					const sourceGlow = (Math.sin(t * 3.0 + v * 8.0) * 0.15 + 0.85)
+
+					// ── 3) Detection area (right of barrier) ──
+					const rightMask = smoothstep(BARRIER_U + BARRIER_HW - 0.02,
+					                             BARRIER_U + BARRIER_HW + 0.08, u)
+
+					// Distance from each slit centre (in normalised space)
+					const du1 = u - BARRIER_U, dv1 = v - SLIT_V1
+					const dist1 = Math.sqrt(du1 * du1 + dv1 * dv1)
+					const du2 = u - BARRIER_U, dv2 = v - SLIT_V2
+					const dist2 = Math.sqrt(du2 * du2 + dv2 * dv2)
+
+					// ── WAVE mode (not observed): travelling wave interference ──
+					const wave1 = Math.cos(dist1 * WAVE_K - t * WAVE_SPEED)
+					const wave2 = Math.cos(dist2 * WAVE_K - t * WAVE_SPEED)
+					// Superposition → interference
+					const interference = (wave1 + wave2) * 0.5  // -1 … +1
+					const waveIntensity = (interference * 0.5 + 0.5)
+
+					// Envelope: attenuate with distance so it fades naturally
+					const env = Math.exp(-dist1 * 0.7) + Math.exp(-dist2 * 0.7)
+					const waveBright = waveIntensity * saturate(env) * rightMask
+
+					// ── PARTICLE mode (observed): two Gaussian bands ──
+					const sig = 0.09
+					const g1 = Math.exp(-(v - SLIT_V1) * (v - SLIT_V1) / (2 * sig * sig))
+					const g2 = Math.exp(-(v - SLIT_V2) * (v - SLIT_V2) / (2 * sig * sig))
+					const partBright = Math.max(g1, g2) * rightMask *
+					                   smoothstep(0.0, 0.3, u - BARRIER_U)
+
+					// ── Blend wave ↔ particle ──
+					const pattern = lerp(waveBright, partBright, observeBlend)
+
+					// ── Colour palette ──
+					//   wave  → cyan / blue
+					//   particle → warm amber / red
+					const cr = lerp(5,   230, observeBlend)
+					const cg = lerp(160,  60, observeBlend)
+					const cb = lerp(255,  30, observeBlend)
+
+					// Combine layers
+					r = cr * pattern
+					g = cg * pattern
+					b = cb * pattern
+
+					// Barrier: dark blue-grey, bright edge highlight
+					const edgeGlow = smoothstep(pxSize * 3, 0, dBarrier) * (1 - barrierMask) * 0.25
+					r = lerp(r, 18, barrierMask) + edgeGlow * 80
+					g = lerp(g, 18, barrierMask) + edgeGlow * 90
+					b = lerp(b, 28, barrierMask) + edgeGlow * 120
+
+					// Slit openings: faint glow when waves pass through
+					const slitGlow1 = smoothstep(pxSize * 2, -pxSize, dSlit1)
+					const slitGlow2 = smoothstep(pxSize * 2, -pxSize, dSlit2)
+					const slitFlicker = Math.sin(t * WAVE_SPEED) * 0.3 + 0.5
+					const slitG = (slitGlow1 + slitGlow2) * slitFlicker * 0.3
+					r += slitG * lerp(40, 180, observeBlend)
+					g += slitG * lerp(100, 50, observeBlend)
+					b += slitG * lerp(160, 20, observeBlend)
+
+					// Source emitter
+					r += sourceMask * sourceGlow * lerp(50, 80, observeBlend)
+					g += sourceMask * sourceGlow * lerp(90, 50, observeBlend)
+					b += sourceMask * sourceGlow * lerp(180, 40, observeBlend)
+
+					// Incoming beam (between source and barrier)
+					if (u > SOURCE_U + 0.06 && u < BARRIER_U - BARRIER_HW) {
+						const beamY = Math.abs(v)
+						const beam = Math.exp(-beamY * beamY / (2 * 0.35 * 0.35))
+						const beamPulse = Math.sin(u * 30.0 - t * WAVE_SPEED) * 0.3 + 0.5
+						const beamI = beam * beamPulse * 0.25
+						r += beamI * lerp(40, 100, observeBlend)
+						g += beamI * lerp(80, 40, observeBlend)
+						b += beamI * lerp(180, 30, observeBlend)
 					}
 
-					// ── Barrier ──
-					if (x >= 4 && x <= BARRIER_X) {
-						const isSlit =
-							(Math.abs(y - SLIT_CENTER1) <= SLIT_WIDTH / 2) ||
-							(Math.abs(y - SLIT_CENTER2) <= SLIT_WIDTH / 2)
-						if (isSlit) {
-							// Slit opening: faint glow
-							px[pi + 0] = 40
-							px[pi + 1] = 80
-							px[pi + 2] = 100
-						} else {
-							// Solid barrier
-							px[pi + 0] = 12
-							px[pi + 1] = 12
-							px[pi + 2] = 18
-						}
-						px[pi + 3] = 255
-						continue
-					}
-
-					// ── Screen / detection area ──
-					const intI = interference[idx]
-					const parI = particle[idx]
-					// Blend based on observation
-					const val  = intI * (1 - observeBlend) + parI * observeBlend
-
-					// Colour: unobserved → cyan,  observed → magenta / red
-					const r = Math.floor(lerp(10,  220, observeBlend) * val)
-					const g = Math.floor(lerp(180, 40,  observeBlend) * val)
-					const b = Math.floor(lerp(255, 100, observeBlend) * val)
-
-					px[pi + 0] = r
-					px[pi + 1] = g
-					px[pi + 2] = b
+					px[pi + 0] = Math.min(255, Math.max(0, Math.floor(r)))
+					px[pi + 1] = Math.min(255, Math.max(0, Math.floor(g)))
+					px[pi + 2] = Math.min(255, Math.max(0, Math.floor(b)))
 					px[pi + 3] = 255
 				}
 			}
 
-			// ── Draw travelling photon particles ──
-			if (frame % 2 === 0) spawnParticle()
-			updateParticles()
+			// ── Photon particles (additive) ──
+			if (frame % 3 === 0) spawnPhoton()
+			updatePhotons()
 
-			for (const p of particles) {
-				const px0 = Math.floor(p.x)
-				const py0 = Math.floor(p.y)
+			for (const p of photons) {
+				// Photon → pixel coords
+				const px0 = Math.round((p.u + 1) * 0.5 * (W - 1))
+				const py0 = Math.round((p.v + 1) * 0.5 * (H - 1))
 				if (px0 < 0 || px0 >= W || py0 < 0 || py0 >= H) continue
+
+				const bright = p.life * p.life  // quadratic falloff
 				const pi = (py0 * W + px0) * 4
-				const bright = p.life
-				// Additive blend — white-ish
-				px[pi + 0] = Math.min(255, px[pi + 0] + Math.floor(200 * bright))
-				px[pi + 1] = Math.min(255, px[pi + 1] + Math.floor(220 * bright))
-				px[pi + 2] = Math.min(255, px[pi + 2] + Math.floor(255 * bright))
+
+				// In wave mode: photons are dimmer, cyan tinted
+				// In particle mode: bright warm dots
+				const pr = lerp(80, 255, observeBlend) * bright
+				const pg = lerp(160, 200, observeBlend) * bright
+				const pb = lerp(220, 100, observeBlend) * bright
+
+				px[pi + 0] = Math.min(255, px[pi + 0] + Math.floor(pr))
+				px[pi + 1] = Math.min(255, px[pi + 1] + Math.floor(pg))
+				px[pi + 2] = Math.min(255, px[pi + 2] + Math.floor(pb))
 			}
 
-			// ── Subtle time-based shimmer on fringes ──
-			const shimmer = Math.sin(time * 0.002) * 0.05 + 0.95
-			for (let i = 0; i < px.length; i += 4) {
-				px[i + 0] = Math.min(255, Math.floor(px[i + 0] * shimmer))
-				px[i + 1] = Math.min(255, Math.floor(px[i + 1] * shimmer))
-				px[i + 2] = Math.min(255, Math.floor(px[i + 2] * shimmer))
-			}
-
-			ctx.putImageData(imageData, 0, 0)
+			ctx.putImageData(imgData, 0, 0)
 		}
 
 		// ─────────────────────────────────────────
@@ -536,10 +596,6 @@
 
 		function splitBytes(v) {
 			return [(v >> 8) & 0xFF, v & 0xFF]
-		}
-
-		function lerp(a, b, t) {
-			return a + (b - a) * t
 		}
 
 		function appendLog(msg) {
