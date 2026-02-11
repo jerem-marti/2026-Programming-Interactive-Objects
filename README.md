@@ -57,7 +57,9 @@ Physical:
 - 1024×3 = 3072 bytes of memory per image
 
 Content: 
-- The pixel is the main subject
+- The pixel is the main subject!
+- LEDs emit strong light: can be considered as light source, reflective, blurred, etc. 
+- Phyiscal object, can be placed or manipulated
 
 Pixel based algorithms: 
 - [Dithering](https://en.wikipedia.org/wiki/Dither) (Bayer, Floyd-Steinberg, error diffusion, etc.)
