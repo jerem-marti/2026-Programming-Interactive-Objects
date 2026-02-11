@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Echo — Send-a-Pixel Ritual</title>
+	<style>
+		* {
+			box-sizing: border-box;
+			margin: 0;
+			padding: 0;
+		}
+
+		body {
+			font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+			background-color: #1a1a2e;
+			color: #e0e0e0;
+			padding: 2rem;
+			min-height: 100vh;
+		}
+
+		h1 {
+			font-size: 1.4rem;
+			margin-bottom: 0.3rem;
+			color: #e94560;
+		}
+
+		h1 span {
+			color: #555;
+			font-weight: 300;
+		}
+
+		p.subtitle {
+			font-size: 0.85rem;
+			color: #888;
+			margin-bottom: 1.5rem;
+		}
+
+		/* ── Layout ────────────────────────────────────────── */
+
+		.container {
+			display: flex;
+			gap: 2rem;
+			flex-wrap: wrap;
+		}
+
+		.panel {
+			background: #16213e;
+			border-radius: 8px;
+			padding: 1.2rem;
+			border: 1px solid #0f3460;
+		}
+
+		.panel h2 {
+			font-size: 0.85rem;
+			text-transform: uppercase;
+			letter-spacing: 0.08em;
+			color: #e94560;
+			margin-bottom: 0.8rem;
+		}
+
+		/* ── Video & Canvas ────────────────────────────────── */
+
+		.preview-area {
+			display: flex;
+			gap: 1.5rem;
+			align-items: flex-start;
+			flex-wrap: wrap;
+		}
+
+		.canvas-box {
+			text-align: center;
+		}
+
+		.canvas-box label {
+			display: block;
+			font-size: 0.75rem;
+			color: #888;
+			margin-bottom: 0.3rem;
+		}
+
+		video {
+			width: 256px;
+			height: 192px;
+			object-fit: cover;
+			border-radius: 4px;
+			background: #000;
+			transform: scaleX(-1);
+		}
+
+		video.hidden {
+			display: none;
+		}
+
+		canvas {
+			display: block;
+			image-rendering: pixelated;
+			background: #000;
+			border-radius: 2px;
+		}
+
+		#matrixCanvas {
+			width: 256px;
+			height: 256px;
+			border: 2px solid #e94560;
+		}
+
+		/* ── State indicator ───────────────────────────────── */
+
+		.state-display {
+			display: flex;
+			align-items: center;
+			gap: 0.6rem;
+			margin-top: 0.8rem;
+			padding: 0.5rem 0.8rem;
+			background: #0d1117;
+			border-radius: 4px;
+			font-size: 0.85rem;
+		}
+
+		.state-label {
+			color: #888;
+			min-width: 50px;
+		}
+
+		.state-value {
+			color: #e94560;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+		}
+
+		.energy-bar {
+			flex: 1;
+			max-width: 120px;
+			height: 6px;
+			background: #1a1a2e;
+			border-radius: 3px;
+			overflow: hidden;
+		}
+
+		.energy-fill {
+			height: 100%;
+			width: 0%;
+			background: linear-gradient(90deg, #e94560, #ff6b9d);
+			border-radius: 3px;
+			transition: width 0.1s;
+		}
+
+		/* ── Buttons ───────────────────────────────────────── */
+
+		.controls {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.5rem;
+			margin-top: 0.8rem;
+		}
+
+		button {
+			padding: 0.5rem 1rem;
+			border: 1px solid #0f3460;
+			border-radius: 4px;
+			background: #0f3460;
+			color: #e0e0e0;
+			font-size: 0.85rem;
+			cursor: pointer;
+			transition: background 0.15s;
+		}
+
+		button:hover {
+			background: #1a4a8a;
+		}
+
+		button:disabled {
+			opacity: 0.35;
+			cursor: not-allowed;
+		}
+
+		button.active {
+			background: #e94560;
+			border-color: #e94560;
+		}
+
+		button.primary {
+			background: #e94560;
+			border-color: #e94560;
+		}
+
+		button.primary:hover {
+			background: #d63851;
+		}
+
+		/* ── Settings ──────────────────────────────────────── */
+
+		.setting {
+			display: flex;
+			align-items: center;
+			gap: 0.6rem;
+			margin-bottom: 0.5rem;
+			font-size: 0.85rem;
+		}
+
+		.setting label {
+			min-width: 100px;
+			color: #aaa;
+		}
+
+		input[type="range"] {
+			flex: 1;
+			max-width: 150px;
+			accent-color: #e94560;
+		}
+
+		/* ── Status dot ────────────────────────────────────── */
+
+		.status-dot {
+			display: inline-block;
+			width: 8px;
+			height: 8px;
+			border-radius: 50%;
+			margin-right: 0.4rem;
+			vertical-align: middle;
+		}
+
+		.status-dot.offline {
+			background: #666;
+		}
+
+		.status-dot.online {
+			background: #4caf50;
+			box-shadow: 0 0 4px #4caf50;
+		}
+
+		/* ── Memory list ───────────────────────────────────── */
+
+		.memory-list {
+			font-size: 0.75rem;
+			color: #6a6a8a;
+			margin-top: 0.5rem;
+			max-height: 60px;
+			overflow-y: auto;
+		}
+
+		.memory-list .event {
+			padding: 0.15rem 0;
+			border-bottom: 1px solid #1a1a2e;
+		}
+
+		/* ── Log ───────────────────────────────────────────── */
+
+		pre#log {
+			font-family: 'Cascadia Code', 'Fira Code', monospace;
+			font-size: 0.75rem;
+			color: #6a6a8a;
+			background: #0d1117;
+			border-radius: 4px;
+			padding: 0.8rem;
+			max-height: 150px;
+			overflow-y: auto;
+			margin-top: 1rem;
+			white-space: pre-wrap;
+			word-break: break-all;
+		}
+	</style>
+</head>
+<body>
+
+	<h1>Echo <span>— Send-a-Pixel Ritual</span></h1>
+	<p class="subtitle">3D SDF &middot; Gesture ritual &middot; Shared presence object &middot; 32&times;32 LED Matrix</p>
+
+	<div class="container">
+
+		<!-- ── Left panel: Camera & Preview ── -->
+		<div class="panel">
+			<h2>Preview</h2>
+			<div class="preview-area">
+				<div class="canvas-box">
+					<label>Camera</label>
+					<video id="video" class="hidden" autoplay playsinline></video>
+				</div>
+				<div class="canvas-box">
+					<label>Matrix Output</label>
+					<canvas id="matrixCanvas" width="32" height="32"></canvas>
+				</div>
+			</div>
+
+			<div class="state-display">
+				<span class="state-label">State</span>
+				<span class="state-value" id="stateValue">idle</span>
+				<span class="state-label" style="margin-left: 0.5rem;">Energy</span>
+				<div class="energy-bar">
+					<div class="energy-fill" id="energyFill"></div>
+				</div>
+			</div>
+
+			<div class="controls">
+				<button id="btnStart" disabled>Start Tracking</button>
+				<button id="btnSimRelease">Sim Release</button>
+				<button id="btnSimReceive">Sim Receive</button>
+			</div>
+		</div>
+
+		<!-- ── Right panel: Settings & Serial ── -->
+		<div class="panel">
+			<h2>SDF Object</h2>
+
+			<div class="setting">
+				<label for="shapeSelect">Base Shape</label>
+				<select id="shapeSelect" style="background:#0f3460; color:#e0e0e0; border:1px solid #0f3460; border-radius:4px; padding:0.3rem; font-size:0.85rem;">
+					<option value="metaball">Metaball Cluster</option>
+					<option value="torus" selected>Torus + Sphere</option>
+					<option value="roundbox">Rounded Box</option>
+				</select>
+			</div>
+
+			<div class="setting">
+				<label for="warpSlider">Domain Warp</label>
+				<input type="range" id="warpSlider" min="0" max="100" step="1" value="20">
+				<span id="warpValue">20%</span>
+			</div>
+
+			<div class="setting">
+				<label for="rotSpeedSlider">Rotation Speed</label>
+				<input type="range" id="rotSpeedSlider" min="0" max="100" step="1" value="30">
+				<span id="rotSpeedValue">30%</span>
+			</div>
+
+			<div class="setting">
+				<label for="ditherSlider">Dither Level</label>
+				<input type="range" id="ditherSlider" min="0" max="100" step="1" value="50">
+				<span id="ditherValue">50%</span>
+			</div>
+
+			<h2 style="margin-top: 1.2rem;">Memory</h2>
+			<div class="memory-list" id="memoryList">
+				<em style="color:#555;">No events yet</em>
+			</div>
+
+			<h2 style="margin-top: 1.2rem;">Serial</h2>
+			<div class="controls">
+				<span id="statusDot" class="status-dot offline"></span>
+				<button id="btnConnect" class="primary">Connect Serial</button>
+				<button id="btnTest">Test Serial</button>
+			</div>
+		</div>
+
+	</div>
+
+	<pre id="log">Loading hand tracking model…</pre>
+
+	<script type="module" src="js/app.js"></script>
+
+</body>
+</html>
