@@ -28,17 +28,26 @@ const video          = document.getElementById('video')
 const sourceCanvas   = document.getElementById('sourceCanvas')
 const previewCanvas  = document.getElementById('previewCanvas')
 const overlayCanvas  = document.getElementById('overlayCanvas')
-const btnConnect     = document.getElementById('btnConnect')
-const btnCamera      = document.getElementById('btnCamera')
-const btnMode        = document.getElementById('btnMode')
-const chkDither      = document.getElementById('chkDither')
-const chkGrayscale   = document.getElementById('chkGrayscale')
-const strengthSlider = document.getElementById('strength')
-const strengthValue  = document.getElementById('strengthValue')
-const chkMesh        = document.getElementById('chkMesh')
-const logEl          = document.getElementById('log')
-const statusDot      = document.getElementById('statusDot')
-const statusText     = document.getElementById('statusText')
+const btnConnect       = document.getElementById('btnConnect')
+const btnCamera        = document.getElementById('btnCamera')
+const btnMode          = document.getElementById('btnMode')
+const chkDither        = document.getElementById('chkDither')
+const chkMono          = document.getElementById('chkMono')
+const chkGrayscale     = document.getElementById('chkGrayscale')
+const strengthSlider   = document.getElementById('strength')
+const strengthValue    = document.getElementById('strengthValue')
+const brightnessSlider = document.getElementById('brightness')
+const brightnessValue  = document.getElementById('brightnessValue')
+const contrastSlider   = document.getElementById('contrast')
+const contrastValue    = document.getElementById('contrastValue')
+const thresholdSlider  = document.getElementById('threshold')
+const thresholdValue   = document.getElementById('thresholdValue')
+const fgColorInput     = document.getElementById('fgColor')
+const bgColorInput     = document.getElementById('bgColor')
+const chkMesh          = document.getElementById('chkMesh')
+const logEl            = document.getElementById('log')
+const statusDot        = document.getElementById('statusDot')
+const statusText       = document.getElementById('statusText')
 
 // ─── Canvas contexts ─────────────────────────────────────────────────────────
 
@@ -145,6 +154,18 @@ strengthSlider.addEventListener('input', () => {
 	strengthValue.textContent = strengthSlider.value
 })
 
+brightnessSlider.addEventListener('input', () => {
+	brightnessValue.textContent = brightnessSlider.value
+})
+
+contrastSlider.addEventListener('input', () => {
+	contrastValue.textContent = contrastSlider.value
+})
+
+thresholdSlider.addEventListener('input', () => {
+	thresholdValue.textContent = thresholdSlider.value
+})
+
 // ─── Mesh Overlay Toggle ────────────────────────────────────────────────────
 
 chkMesh.addEventListener('change', () => {
@@ -208,8 +229,14 @@ async function liveLoop() {
 			MATRIX_SIZE, MATRIX_SIZE
 		)
 		outputImage = floydSteinberg(clone, {
-			grayscale: chkGrayscale.checked,
-			strength:  parseFloat(strengthSlider.value)
+			monochrome: chkMono.checked,
+			grayscale:  chkGrayscale.checked,
+			strength:   parseFloat(strengthSlider.value),
+			brightness: parseInt(brightnessSlider.value),
+			contrast:   parseFloat(contrastSlider.value),
+			threshold:  parseInt(thresholdSlider.value),
+			fgColor:    fgColorInput.value,
+			bgColor:    bgColorInput.value
 		})
 	} else {
 		outputImage = sourceImage
