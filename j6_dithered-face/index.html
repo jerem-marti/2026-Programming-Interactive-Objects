@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Dithered Face — 32×32 Matrix</title>
+	<style>
+		* { box-sizing: border-box; margin: 0; padding: 0; }
+
+		body {
+			font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+			background: #1a1a2e;
+			color: #e0e0e0;
+			padding: 2rem;
+			min-height: 100vh;
+		}
+
+		h1 {
+			font-size: 1.4rem;
+			margin-bottom: 0.3rem;
+			color: #e94560;
+		}
+		h1 span { color: #555; font-weight: 300; }
+
+		p.subtitle {
+			font-size: 0.85rem;
+			color: #888;
+			margin-bottom: 1.5rem;
+		}
+
+		/* ── Layout ─────────────────────────────────────────── */
+
+		.container {
+			display: flex;
+			gap: 2rem;
+			flex-wrap: wrap;
+			align-items: flex-start;
+		}
+
+		.panel {
+			background: #16213e;
+			border-radius: 8px;
+			padding: 1.2rem;
+			border: 1px solid #0f3460;
+		}
+
+		.panel h2 {
+			font-size: 0.85rem;
+			text-transform: uppercase;
+			letter-spacing: 0.08em;
+			color: #e94560;
+			margin-bottom: 0.8rem;
+		}
+
+		/* ── Video & Canvases ───────────────────────────────── */
+
+		.preview-area {
+			display: flex;
+			gap: 1.5rem;
+			align-items: flex-start;
+			flex-wrap: wrap;
+		}
+
+		.canvas-box {
+			text-align: center;
+		}
+
+		.canvas-box label {
+			display: block;
+			font-size: 0.75rem;
+			color: #888;
+			margin-bottom: 0.3rem;
+		}
+
+		.video-wrap {
+			position: relative;
+			width: 256px;
+			height: 192px;
+		}
+
+		video {
+			width: 256px;
+			height: 192px;
+			object-fit: cover;
+			border-radius: 4px;
+			background: #000;
+		}
+
+		video.hidden { display: none; }
+
+		#overlayCanvas {
+			position: absolute;
+			top: 0; left: 0;
+			width: 256px;
+			height: 192px;
+			pointer-events: none;
+			display: none;
+		}
+
+		canvas {
+			display: block;
+			image-rendering: pixelated;
+			background: #000;
+			border-radius: 2px;
+		}
+
+		#sourceCanvas {
+			width: 192px;
+			height: 192px;
+		}
+
+		#previewCanvas {
+			width: 192px;
+			height: 192px;
+			border: 2px solid #e94560;
+		}
+
+		/* ── Status ──────────────────────────────────────────── */
+
+		.status-bar {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			margin-bottom: 1rem;
+			font-size: 0.8rem;
+		}
+
+		.dot {
+			width: 8px;
+			height: 8px;
+			border-radius: 50%;
+			background: #555;
+		}
+		.dot.idle   { background: #555; }
+		.dot.active { background: #2ecc71; }
+		.dot.error  { background: #e94560; }
+
+		/* ── Buttons ─────────────────────────────────────────── */
+
+		.controls {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.5rem;
+			margin-top: 0.8rem;
+		}
+
+		button {
+			padding: 0.5rem 1rem;
+			border: 1px solid #0f3460;
+			border-radius: 4px;
+			background: #0f3460;
+			color: #e0e0e0;
+			font-size: 0.85rem;
+			cursor: pointer;
+			transition: background 0.15s;
+		}
+		button:hover { background: #1a4a8a; }
+		button:disabled { opacity: 0.35; cursor: not-allowed; }
+		button.active { background: #e94560; border-color: #e94560; }
+		button.primary { background: #e94560; border-color: #e94560; }
+		button.primary:hover { background: #d63851; }
+
+		/* ── Settings ────────────────────────────────────────── */
+
+		.setting {
+			display: flex;
+			align-items: center;
+			gap: 0.6rem;
+			margin-bottom: 0.5rem;
+			font-size: 0.85rem;
+		}
+
+		.setting label {
+			min-width: 100px;
+			color: #aaa;
+		}
+
+		input[type="range"] {
+			flex: 1;
+			max-width: 150px;
+			accent-color: #e94560;
+		}
+
+		/* ── Log ──────────────────────────────────────────────── */
+
+		pre#log {
+			font-family: 'Cascadia Code', 'Fira Code', monospace;
+			font-size: 0.75rem;
+			color: #6a6a8a;
+			background: #0d1117;
+			border-radius: 4px;
+			padding: 0.8rem;
+			max-height: 120px;
+			overflow-y: auto;
+			margin-top: 1rem;
+			white-space: pre-wrap;
+			word-break: break-all;
+		}
+	</style>
+</head>
+<body>
+
+	<h1>Dithered Face <span>— 32×32 LED Matrix</span></h1>
+	<p class="subtitle">
+		MediaPipe FaceMesh · Floyd-Steinberg dithering · Web Serial API (Chrome only)
+	</p>
+
+	<div class="status-bar">
+		<span class="dot idle" id="statusDot"></span>
+		<span id="statusText">Initializing…</span>
+	</div>
+
+	<div class="container">
+
+		<!-- ── Left panel: Video & Preview ── -->
+		<div class="panel">
+			<h2>Preview</h2>
+			<div class="preview-area">
+
+				<div class="canvas-box">
+					<label>Webcam Feed</label>
+					<div class="video-wrap">
+						<video id="video" class="hidden" autoplay playsinline></video>
+						<canvas id="overlayCanvas" width="256" height="192"></canvas>
+					</div>
+				</div>
+
+				<div class="canvas-box">
+					<label>Face Crop (32×32)</label>
+					<canvas id="sourceCanvas" width="32" height="32"></canvas>
+				</div>
+
+				<div class="canvas-box">
+					<label>Output → Matrix</label>
+					<canvas id="previewCanvas" width="32" height="32"></canvas>
+				</div>
+
+			</div>
+
+			<div class="controls">
+				<button id="btnCamera">📷 Start Camera</button>
+				<button id="btnMode">🎨 Pixel Art Mode</button>
+			</div>
+		</div>
+
+		<!-- ── Right panel: Settings & Serial ── -->
+		<div class="panel">
+			<h2>Rendering</h2>
+
+			<div class="setting">
+				<label for="chkDither">Dithering</label>
+				<input type="checkbox" id="chkDither" checked>
+			</div>
+			<div class="setting">
+				<label for="chkGrayscale">Grayscale</label>
+				<input type="checkbox" id="chkGrayscale">
+			</div>
+			<div class="setting">
+				<label for="strength">Strength</label>
+				<input type="range" id="strength" min="0" max="1" step="0.05" value="1.0">
+				<span id="strengthValue">1</span>
+			</div>
+
+			<h2 style="margin-top: 1rem;">Debug</h2>
+			<div class="setting">
+				<label for="chkMesh">Show Mesh</label>
+				<input type="checkbox" id="chkMesh">
+			</div>
+
+			<h2 style="margin-top: 1rem;">Serial</h2>
+			<div class="controls">
+				<button id="btnConnect" class="primary">Connect Serial</button>
+			</div>
+		</div>
+
+	</div>
+
+	<pre id="log">Initializing…</pre>
+
+	<script type="module" src="js/app.js"></script>
+
+</body>
+</html>
