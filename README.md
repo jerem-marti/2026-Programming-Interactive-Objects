@@ -48,6 +48,27 @@ Aleternative to the custom PicoDriver:
 - [Platformio for VS Code](https://platformio.org) (install as VS Code plugin)
 - [GitHub Desktop](https://desktop.github.com) (not mandatory, but handy)
 
+## Hooks
+Physical: 
+- 32×32 (1024) pixels 
+- 192×192 mm (32×P6=192)
+- Square display (uncommon!)
+- Unadorned, tileable 
+- 1024×3 = 3027 bytes of memory per image
+
+Content: 
+- The pixel is the main subject 
+
+Pixel based algorithms: 
+- [Dithering](https://en.wikipedia.org/wiki/Dither) (Bayer, Floyd-Steinberg, error diffusion, etc.)
+- [Pixel Sorting](https://github.com/DavidMcLaughlin208/PixelSorting)
+- [“Sand” games](https://neal.fun/sandboxels/)
+- [Pixel grapics/icons](https://newyear.nckl.gov.kh/en/zelda-sprite-sheet.html)
+- [Doom Flame](https://www.youtube.com/watch?v=B7iacc3HiVE)
+- [Cellular automatas](https://conwaylife.com)
+- [XOR patterns](https://hackaday.com/2021/04/13/alien-art-drawn-with-surprisingly-simple-math/aemkei-xor-patterns_16-9b/)
+
+
 ## Workshop organization
 
 ### Day 1  
@@ -84,6 +105,7 @@ the phyiscial LED matrix, a possible context, LEDs as light source(s),
 - Bring something interesting, a little discovery – not an idea for a finished project; let the process guide you
 - Show hand drawings and sketches, low-quality screenshots or videos, a little demo, an animation  
 - No mood-boards! No projects of others that involve LED matrices! Do (deep) research instead on the boader topic(s). 
+
 
 
 ## Sources
