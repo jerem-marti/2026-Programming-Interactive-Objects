@@ -15,36 +15,74 @@ byte[]buffer;
 // PImage is Processing's image type
 PImage img;
 
+int dirX=1;
+int dirY;
+int posX;
+int posY;
+
 void setup() {
   // The Processing preprocessor only accepts literal values for size()
   // We can't do: size(TOTAL_WIDTH, TOTAL_HEIGHT);
   size(32, 32);
-  
+
   smooth(8);
-  
-  img = loadImage("cat.jpg");
+
+  img = loadImage("pcb.j
+ pg");
+
+  posX = int(random(img.width));
+  posY = int(random(img.height));
+ 
 
   buffer = new byte[TOTAL_WIDTH * TOTAL_HEIGHT * (COLOR_DEPTH / 8)];
 
   String[] list = Serial.list();
   printArray(list);
-  
+
   try {
     // On macOS / Linux see the console for all available ports
-    // final String PORT_NAME = "/dev/cu.usbserial-02B3ACDB";
+    final String PORT_NAME = "/dev/cu.usbserial-02B3ACDB";
     // On Windows the ports are numbered
     final String PORT_NAME = "COM7";
     serial = new Serial(this, PORT_NAME, BAUD_RATE);
-  } catch (Exception e) {
+  }
+  catch (Exception e) {
     println("Serial port not intialized...");
-  }  
+  }
+  
 }
 
 void draw() {
-   
-  float imgSize = map(sin(frameCount * 0.05), -1, 1, 32, 256);
-  image(img, width/2-imgSize/2, height/2-imgSize/2, imgSize, imgSize);
-  
+
+
+  if (frameCount % 100 == 1) {
+    int spd = 1;
+    if (dirY == 0) {
+      dirX = 0;
+      dirY = random(2) < 1 ? -spd : spd;
+    } else {
+      dirX = random(2) < 1 ? -spd : spd;
+      dirY = 0;
+    }
+  }
+
+  //float imgSize = map(sin(frameCount * 0.05), -1, 1, 32, 256);
+
+  posX = (posX + dirX + img.width) % img.width;
+  posY = (posY + dirY + img.height) % img.height;
+
+  translate(-(img.width+posX), -(img.height+posY));
+
+
+  // draw a 3x3 grid of the image for wrapping around the edges;
+  for (int j=0; j<3; j++) {
+    for (int i=0; i<3; i++) {
+      int ix = i * img.width;
+      int iy = j * img.height;
+      image(img, ix, iy);
+    }
+  }
+
   // --------------------------------------------------------------------------
   // Write to the serial port (if open)
   if (serial != null) {
