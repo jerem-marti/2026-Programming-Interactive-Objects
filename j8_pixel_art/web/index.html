@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Pixel Art — 32×32 Matrix</title>
+	<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="app">
+
+	<!-- Left: canvas preview -->
+	<div class="canvas-panel">
+		<canvas id="canvas"></canvas>
+		<div class="fps">FPS: <span id="fps">0</span></div>
+	</div>
+
+	<!-- Right: controls -->
+	<div class="controls">
+		<h1>⬛ Pixel Art Matrix</h1>
+
+		<!-- Serial connection -->
+		<span class="section-label">Serial</span>
+		<button id="btn-connect">Connect Serial Port</button>
+
+		<!-- Generator selector -->
+		<span class="section-label">Generator</span>
+		<select id="sel-generator"></select>
+
+		<!-- Dynamic parameters -->
+		<span class="section-label">Parameters</span>
+		<div id="params"></div>
+
+		<!-- Playback -->
+		<div class="btn-row">
+			<button id="btn-pause">⏸ Pause</button>
+		</div>
+
+		<!-- Log -->
+		<span class="section-label">Log</span>
+		<div id="log" class="log">
+			<div>Open in Chrome — Web Serial API required</div>
+		</div>
+	</div>
+
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
