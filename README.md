@@ -54,19 +54,26 @@ Physical:
 - 192×192 mm (32×P6=192)
 - Square display (uncommon!)
 - Unadorned, tileable 
-- 1024×3 = 3027 bytes of memory per image
+- 1024×3 = 3072 bytes of memory per image
 
 Content: 
-- The pixel is the main subject 
+- The pixel is the main subject!
+- LEDs emit strong light: can be considered as light source, reflective, blurred, etc. 
+- Phyiscal object, can be placed or manipulated
 
 Pixel based algorithms: 
 - [Dithering](https://en.wikipedia.org/wiki/Dither) (Bayer, Floyd-Steinberg, error diffusion, etc.)
 - [Pixel Sorting](https://github.com/DavidMcLaughlin208/PixelSorting)
 - [“Sand” games](https://neal.fun/sandboxels/)
-- [Pixel grapics/icons](https://newyear.nckl.gov.kh/en/zelda-sprite-sheet.html)
 - [Doom Flame](https://www.youtube.com/watch?v=B7iacc3HiVE)
 - [Cellular automatas](https://conwaylife.com)
-- [XOR patterns](https://hackaday.com/2021/04/13/alien-art-drawn-with-surprisingly-simple-math/aemkei-xor-patterns_16-9b/)
+- [XOR patterns](https://hackaday.com/2021/04/13/alien-art-drawn-with-surprisingly-simple-math/)
+- [Flood Fill](https://en.wikipedia.org/wiki/Flood_fill)
+
+Pixel based content/media: 
+- [Pixel grapics/icons](https://www.pngkey.com/detail/u2q8o0w7q8a9i1r5_bosses-zelda-enemy-sprite-sheet/)
+- [Bitmap fonts](https://int10h.org/oldschool-pc-fonts/download/)
+- Dithering and tile-based patterns of [MacPaint](https://en.wikipedia.org/wiki/MacPaint)
 
 
 ## Workshop organization
@@ -88,7 +95,8 @@ Pixel based algorithms:
 - Code exercises, theory
 - Personal reserach, prototyping, project development 
 - Daily feedback and project discussion  
-- Guest: Raven Kwok (16h)
+- Guest: Raven Kwok (16h), [X](https://x.com/RavenKwok), [Instagram](https://www.instagram.com/_ravenkwok/)
+
 
 ### Day 4
 - Code exercises, theory
